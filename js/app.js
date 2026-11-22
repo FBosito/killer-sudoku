@@ -156,11 +156,21 @@
   const elapsedMs = () => elapsed + (running ? performance.now() - runStart : 0);
   const fmt = KS.Snapshot.fmtTime;
 
+  // Die Uhr schreibt nur, wenn sich die angezeigte Sekunde ändert: Jeder DOM-Schreibzugriff
+  // erzwingt ein Neu-Layout, und 60 davon pro Sekunde bremsen die Stifteingabe spürbar aus.
+  let clockTimer = 0;
+  let shownTime = '';
   function tick() {
-    els.timer.textContent = fmt(elapsedMs());
+    const t = fmt(elapsedMs());
+    if (t === shownTime) return;
+    shownTime = t;
+    els.timer.textContent = t;
     const live = document.getElementById('session-live');
-    if (live) live.textContent = els.timer.textContent;
-    if (running) requestAnimationFrame(tick);
+    if (live) live.textContent = t;
+  }
+  function setClockRunning(on) {
+    clearInterval(clockTimer);
+    clockTimer = on ? setInterval(tick, 200) : 0;
   }
 
   function start() {
@@ -170,6 +180,7 @@
     stopped = false;
     runStart = performance.now();
     hideMsg();
+    setClockRunning(true);
     tick();
     updateUI();
     renderSession();
@@ -178,6 +189,7 @@
   function halt() {
     if (running) elapsed += performance.now() - runStart;
     running = false;
+    setClockRunning(false);
     finishStroke();
     tick();
   }
@@ -227,6 +239,7 @@
     const myId = ++generationId;
     if (running) { elapsed += performance.now() - runStart; running = false; closeEntryAs('verworfen'); }
     else closeEntry();
+    setClockRunning(false);
     paused = false;
     stopped = false;
     aborted = false;
@@ -235,7 +248,8 @@
     strokes = [];
     game = null;
     generating = true;
-    els.timer.textContent = fmt(0);
+    shownTime = fmt(0);
+    els.timer.textContent = shownTime;
     renderOverlay();
     redrawInk();
     showMsg('Erzeuge Rätsel …');
