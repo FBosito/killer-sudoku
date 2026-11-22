@@ -36,35 +36,8 @@
       g.fillRect(M + PAD, HEAD + PAD, 900, 900);
     }
 
-    g.save();
-    g.translate(M + PAD, HEAD + PAD);
-
-    // Gitter
-    for (let i = 1; i < 9; i++) {
-      g.strokeStyle = i % 3 === 0 ? '#222' : '#555';
-      g.lineWidth = i % 3 === 0 ? 3.5 : 1.2;
-      g.beginPath(); g.moveTo(i * 100, 0); g.lineTo(i * 100, 900); g.stroke();
-      g.beginPath(); g.moveTo(0, i * 100); g.lineTo(900, i * 100); g.stroke();
-    }
-    g.strokeStyle = '#222';
-    g.lineWidth = 4;
-    g.strokeRect(0, 0, 900, 900);
-
-    // Käfige
-    const geo = root.KS.Geometry.cageOutlines(cages);
-    g.strokeStyle = '#333';
-    g.lineWidth = 1.6;
-    g.lineCap = 'round';
-    g.setLineDash([2, 4]);
-    for (const p of geo.paths) g.stroke(new Path2D(p.d));
-    g.setLineDash([]);
-    g.fillStyle = '#111';
-    g.font = `19px ${font}`;
-    for (const l of geo.labels) g.fillText(l.text, l.x, l.y);
-
-    // Handschrift
-    root.KS.Ink.drawStrokes(g, strokes, 900);
-    g.restore();
+    root.KS.Geometry.drawBoard(g, cages, 900, M + PAD, HEAD + PAD);
+    root.KS.Ink.drawStrokes(g, strokes, 900, M + PAD, HEAD + PAD);
     return cv;
   }
 

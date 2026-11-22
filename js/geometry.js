@@ -50,6 +50,43 @@
     return { paths: segs.map((s, k) => ({ cage: k, d: s.join('') })), labels };
   }
 
+  const FONT = '"Segoe UI", system-ui, -apple-system, Roboto, sans-serif';
+
+  /** Zeichnet das Brett (weiß, Gitter, Käfige, Summen) auf einen 2D-Kontext.
+   *  size = Brettbreite in Kontexteinheiten, ox/oy = linke obere Ecke. cages darf null sein. */
+  function drawBoard(ctx, cages, size, ox = 0, oy = 0) {
+    ctx.save();
+    ctx.translate(ox, oy);
+    ctx.scale(size / 900, size / 900);
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, 900, 900);
+    ctx.lineCap = 'butt';
+    for (let i = 1; i < 9; i++) {
+      ctx.strokeStyle = i % 3 === 0 ? '#222' : '#555';
+      ctx.lineWidth = i % 3 === 0 ? 3.5 : 1.2;
+      ctx.beginPath(); ctx.moveTo(i * 100, 0); ctx.lineTo(i * 100, 900); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i * 100); ctx.lineTo(900, i * 100); ctx.stroke();
+    }
+    ctx.strokeStyle = '#222';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, 896, 896);
+    if (cages) {
+      const geo = cageOutlines(cages);
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1.6;
+      ctx.lineCap = 'round';
+      ctx.setLineDash([2, 4]);
+      for (const p of geo.paths) ctx.stroke(new Path2D(p.d));
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#111';
+      ctx.font = `19px ${FONT}`;
+      ctx.textBaseline = 'alphabetic';
+      ctx.textAlign = 'left';
+      for (const l of geo.labels) ctx.fillText(l.text, l.x, l.y);
+    }
+    ctx.restore();
+  }
+
   root.KS = root.KS || {};
-  root.KS.Geometry = { cageOutlines };
+  root.KS.Geometry = { cageOutlines, drawBoard };
 })(typeof self !== 'undefined' ? self : this);

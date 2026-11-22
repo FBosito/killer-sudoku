@@ -90,7 +90,7 @@ try {
   await send('Emulation.setDeviceMetricsOverride', { width: 820, height: 1180, deviceScaleFactor: 1, mobile: false });
   await send('Page.navigate', { url });
   await waitForPuzzle();
-  check('Rätsel wird erzeugt', await evaluate("document.querySelectorAll('.overlay path.cage').length > 15"));
+  check('Rätsel wird erzeugt', await evaluate("KS.App.game.cages.length > 15"));
   check('Start aktiv, Stop inaktiv', await evaluate("!document.getElementById('btn-start').disabled && document.getElementById('btn-stop').disabled"));
   await screenshot('1-neu.png');
 
@@ -113,6 +113,23 @@ try {
   await pen(inCell(12, [[0.6, 0.35], [0.6, 0.85]]));
   await pen(inCell(13, [[0.15, 0.15], [0.3, 0.1], [0.25, 0.32]]));
   check('Striche bleiben als Tinte stehen', (await strokeCount()) === 5);
+  // Druck: leicht vs. fest ergibt unterschiedliche gespeicherte Druckwerte und Breiten
+  {
+    const strokeWith = async (force, cell) => {
+      const pts = inCell(cell, [[0.2, 0.5], [0.8, 0.5]]);
+      const base = { pointerType: 'pen', button: 'left', force };
+      await send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pts[0][0], y: pts[0][1], buttons: 1, clickCount: 1, ...base });
+      for (const [x, y] of pts.slice(1)) await send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y, buttons: 1, ...base });
+      await send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pts.at(-1)[0], y: pts.at(-1)[1], buttons: 0, clickCount: 1, ...base });
+    };
+    await strokeWith(0.1, 60);
+    await strokeWith(1.0, 61);
+    const pr = await evaluate('KS.App.strokes.slice(-2).map((s) => s[s.length - 1][2])');
+    const w = await evaluate(`KS.App.strokes.slice(-2).map((s) => KS.Ink.widthAt(s[s.length - 1][2]))`);
+    check('Druck steuert Strichbreite', pr[0] < 0.3 && pr[1] > 0.8 && w[1] > w[0] * 2, `druck=${pr} breite=${w.map((x) => x.toFixed(4))}`);
+    await screenshot('2b-druck.png');
+    await evaluate('KS.App.strokes.splice(-2, 2); 1');
+  }
   // Notizen ober- und unterhalb des Bretts
   await pen(interp([[rect.x + 100, rect.y - 40], [rect.x + 160, rect.y - 50]]));
   await pen(interp([[rect.x + 100, rect.y + rect.w + 40], [rect.x + 160, rect.y + rect.w + 30]]));

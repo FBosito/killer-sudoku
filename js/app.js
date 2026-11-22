@@ -10,7 +10,7 @@
 
   const $ = (id) => document.getElementById(id);
   const els = {
-    sheet: $('sheet'), board: $('board'), overlay: $('overlay'), ink: $('ink'), msg: $('board-msg'),
+    sheet: $('sheet'), board: $('board'), ink: $('ink'), msg: $('board-msg'),
     timer: $('timer'), start: $('btn-start'), pause: $('btn-pause'), stop: $('btn-stop'), abort: $('btn-abort'), newBtn: $('btn-new'), save: $('btn-save'),
     bestCharts: $('best-charts'), bestTitle: $('best-title'), clearLog: $('btn-clear-log'), sessionTitle: $('session-title'), sessionRows: $('session-rows'), sessionSummary: $('session-summary'),
   };
@@ -252,21 +252,7 @@
   }
 
   // ---------- Darstellung ----------
-  function renderOverlay() {
-    const S = 100, parts = [];
-    for (let i = 1; i < 9; i++) {
-      const cls = i % 3 === 0 ? 'thick' : 'thin';
-      parts.push(`<line class="${cls}" x1="${i * S}" y1="0" x2="${i * S}" y2="900"/>`);
-      parts.push(`<line class="${cls}" x1="0" y1="${i * S}" x2="900" y2="${i * S}"/>`);
-    }
-    parts.push('<rect class="frame" x="2" y="2" width="896" height="896"/>');
-    if (game) {
-      const geo = KS.Geometry.cageOutlines(game.cages);
-      for (const p of geo.paths) parts.push(`<path class="cage" d="${p.d}"/>`);
-      for (const l of geo.labels) parts.push(`<text class="sum" x="${l.x}" y="${l.y}">${l.text}</text>`);
-    }
-    els.overlay.innerHTML = parts.join('');
-  }
+  function renderOverlay() { renderBoard(); }
 
   function updateUI() {
     els.start.disabled = !game || running || paused || generating || aborted;
@@ -291,34 +277,64 @@
   function hideMsg() { clearTimeout(msgTimer); els.msg.hidden = true; }
 
   // ---------- Tinte ----------
-  const ctx = els.ink.getContext('2d');
+  // Latenzarm: undurchsichtige Zeichenfläche (alpha: false) mit desynchronized-Hinweis.
+  // Weil sie nicht transparent ist, wird das Brett mit auf die Fläche gezeichnet –
+  // aus einem Zwischenspeicher, damit Neuzeichnen (z. B. beim Radieren) billig bleibt.
+  const ctx = els.ink.getContext('2d', { alpha: false, desynchronized: true }) || els.ink.getContext('2d');
+  const boardCache = document.createElement('canvas');
+  const bctx = boardCache.getContext('2d', { alpha: false });
+  const NOTE_BG = '#f4f5f7';
   // Koordinaten der Striche: Ursprung = linke obere Brett-Ecke, Einheit = Brettbreite.
-  // Notizen ober-/unterhalb des Bretts haben also y < 0 bzw. y > 1.
+  // Notizen im Rand haben also Werte < 0 bzw. > 1. Punkte: [x, y, druck].
   let rect = null;       // Brett
   let sheetRect = null;  // Zeichenfläche (Blatt)
   let ox = 0, oy = 0;    // Brett-Versatz innerhalb der Zeichenfläche
-  let active = null; // { id, pts, erasing }
+  let dpr = 1;
+  let active = null;     // { id, pts, erasing }
+  // pointerrawupdate liefert Stiftpunkte ungebündelt (nicht nur einmal pro Frame)
+  const useRaw = 'onpointerrawupdate' in window;
 
   function resizeInk() {
     rect = els.board.getBoundingClientRect();
     sheetRect = els.sheet.getBoundingClientRect();
     ox = rect.left - sheetRect.left;
     oy = rect.top - sheetRect.top;
-    const dpr = window.devicePixelRatio || 1;
-    els.ink.width = Math.round(sheetRect.width * dpr);
-    els.ink.height = Math.round(sheetRect.height * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    dpr = window.devicePixelRatio || 1;
+    const w = Math.round(sheetRect.width * dpr), h = Math.round(sheetRect.height * dpr);
+    els.ink.width = w; els.ink.height = h;
+    boardCache.width = w; boardCache.height = h;
+    renderBoard();
+  }
+
+  function renderBoard() {
+    if (!rect) return;
+    bctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    bctx.fillStyle = NOTE_BG;
+    bctx.fillRect(0, 0, sheetRect.width, sheetRect.height);
+    KS.Geometry.drawBoard(bctx, game ? game.cages : null, rect.width, ox, oy);
     redrawInk();
   }
 
   function redrawInk() {
     if (!rect) return;
-    ctx.clearRect(0, 0, sheetRect.width, sheetRect.height);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(boardCache, 0, 0);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     Ink.drawStrokes(ctx, strokes, rect.width, ox, oy);
     if (active && !active.erasing) Ink.drawStrokes(ctx, [active.pts], rect.width, ox, oy);
   }
 
   const toBoard = (e) => [(e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.width];
+
+  /** Punkt mit Druck; Druck wird leicht geglättet, damit die Breite nicht flackert. */
+  function samplePoint(ev) {
+    const [x, y] = toBoard(ev);
+    let p = ev.pressure;
+    if (ev.pointerType !== 'pen' || !(p > 0)) p = 0.5; // Maus oder Stift ohne Druckwerte
+    const last = active && !active.erasing ? active.pts[active.pts.length - 1] : null;
+    if (last) p = last[2] * 0.6 + p * 0.4;
+    return [x, y, Math.round(p * 1000) / 1000];
+  }
 
   // Radiergummi-Ende (buttons 32) oder gedrückte Seitentaste (buttons 2)
   const isEraser = (e) => e.pointerType === 'pen' && ((e.buttons & 32) !== 0 || (e.buttons & 2) !== 0 || e.button === 5);
@@ -334,44 +350,39 @@
       return;
     }
     try { els.ink.setPointerCapture(e.pointerId); } catch (err) { /* z. B. synthetische Events */ }
-    const p = toBoard(e);
-    active = { id: e.pointerId, pts: [p], erasing: isEraser(e) };
-    if (active.erasing) erase(p);
-    else redrawInk();
+    const erasing = isEraser(e);
+    active = { id: e.pointerId, pts: [], erasing, lastTs: e.timeStamp };
+    const p = samplePoint(e);
+    active.pts.push(p);
+    if (erasing) erase(p);
+    else Ink.drawTail(ctx, active.pts, 0, rect.width, ox, oy);
   }
 
   function onMove(e) {
     if (!active || e.pointerId !== active.id) return;
-    e.preventDefault();
+    if (e.type === 'pointermove') e.preventDefault();
     const evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || [];
-    const list = evs.length ? evs : [e];
+    // pointerrawupdate und pointermove liefern dieselben Punkte: ältere verwerfen,
+    // gleich alte fallen beim Zeichnen über den Mindestabstand weg
+    const list = (evs.length ? evs : [e]).filter((ev) => ev.timeStamp >= active.lastTs);
+    if (!list.length) return;
+    active.lastTs = list[list.length - 1].timeStamp;
     if (active.erasing) { for (const ev of list) erase(toBoard(ev)); return; }
-    // inkrementell zeichnen
-    const w = rect.width;
-    ctx.save();
-    ctx.strokeStyle = Ink.INK.color;
-    ctx.lineWidth = Ink.INK.width * w;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    let last = active.pts[active.pts.length - 1];
-    ctx.moveTo(ox + last[0] * w, oy + last[1] * w);
+    const pts = active.pts;
+    const from = pts.length;
     for (const ev of list) {
-      const p = toBoard(ev);
-      if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 0.0008) continue;
-      active.pts.push(p);
-      ctx.lineTo(ox + p[0] * w, oy + p[1] * w);
-      last = p;
+      const p = samplePoint(ev);
+      const last = pts[pts.length - 1];
+      if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 0.0004) { last[2] = p[2]; continue; }
+      pts.push(p);
     }
-    ctx.stroke();
-    ctx.restore();
+    Ink.drawTail(ctx, pts, from, rect.width, ox, oy); // nur das neue Stück zeichnen
   }
 
   function finishStroke() {
     if (!active) return;
     if (!active.erasing) strokes.push(active.pts);
     active = null;
-    redrawInk();
   }
 
   function onUp(e) {
@@ -406,6 +417,7 @@
   // ---------- Events ----------
   els.ink.addEventListener('pointerdown', onDown);
   els.ink.addEventListener('pointermove', onMove);
+  if (useRaw) els.ink.addEventListener('pointerrawupdate', onMove);
   els.ink.addEventListener('pointerup', onUp);
   els.ink.addEventListener('pointercancel', onUp);
   els.ink.addEventListener('contextmenu', (e) => e.preventDefault()); // Seitentaste
