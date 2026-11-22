@@ -291,10 +291,10 @@
   function hideMsg() { clearTimeout(msgTimer); els.msg.hidden = true; }
 
   // ---------- Tinte ----------
-  // Latenzarm: undurchsichtige Zeichenfläche (alpha: false) mit desynchronized-Hinweis.
-  // Weil sie nicht transparent ist, wird das Brett mit auf die Fläche gezeichnet –
+  // Undurchsichtige Zeichenfläche; das Brett wird mit auf die Fläche gezeichnet –
   // aus einem Zwischenspeicher, damit Neuzeichnen (z. B. beim Radieren) billig bleibt.
-  const ctx = els.ink.getContext('2d', { alpha: false, desynchronized: true }) || els.ink.getContext('2d');
+  // Stiftpunkte werden nur gesammelt und einmal pro Bildschirmbild gezeichnet.
+  const ctx = els.ink.getContext('2d', { alpha: false });
   const boardCache = document.createElement('canvas');
   const bctx = boardCache.getContext('2d', { alpha: false });
   const NOTE_BG = '#f4f5f7';
@@ -304,9 +304,42 @@
   let sheetRect = null;  // Zeichenfläche (Blatt)
   let ox = 0, oy = 0;    // Brett-Versatz innerhalb der Zeichenfläche
   let dpr = 1;
-  let active = null;     // { id, pts, erasing }
-  // pointerrawupdate liefert Stiftpunkte ungebündelt (nicht nur einmal pro Frame)
-  const useRaw = 'onpointerrawupdate' in window;
+  let active = null;     // { id, pts, erasing, drawn }
+  let frameReq = 0;
+
+  // ---------- Diagnose (nur mit ?debug in der Adresse) ----------
+  const DEBUG = /[?&]debug/.test(location.search);
+  const dbg = { events: 0, points: 0, frames: 0, drawMs: 0, maxDraw: 0, maxGap: 0, lastFrame: 0, handlerMs: 0 };
+  if (DEBUG) {
+    const box = document.createElement('div');
+    box.className = 'debug-box';
+    document.body.appendChild(box);
+    setInterval(() => {
+      box.textContent = `Ereignisse/s ${dbg.events} · Punkte/s ${dbg.points} · Bilder/s ${dbg.frames}` +
+        ` · Zeichnen Ø ${(dbg.frames ? dbg.drawMs / dbg.frames : 0).toFixed(2)} ms (max ${dbg.maxDraw.toFixed(1)})` +
+        ` · Handler ${dbg.handlerMs.toFixed(1)} ms/s · größte Bildlücke ${dbg.maxGap.toFixed(0)} ms` +
+        ` · Striche ${strokes.length} · DPR ${dpr}`;
+      Object.assign(dbg, { events: 0, points: 0, frames: 0, drawMs: 0, maxDraw: 0, maxGap: 0, handlerMs: 0 });
+    }, 1000);
+  }
+
+  /** Zeichnet beim nächsten Bildschirmbild alle seither gesammelten Punkte. */
+  function scheduleDraw() {
+    if (frameReq) return;
+    frameReq = requestAnimationFrame((ts) => {
+      frameReq = 0;
+      if (!active || active.erasing) return;
+      const t0 = DEBUG ? performance.now() : 0;
+      Ink.drawTail(ctx, active.pts, active.drawn, rect.width, ox, oy);
+      active.drawn = active.pts.length;
+      if (DEBUG) {
+        const d = performance.now() - t0;
+        dbg.frames++; dbg.drawMs += d; dbg.maxDraw = Math.max(dbg.maxDraw, d);
+        if (dbg.lastFrame) dbg.maxGap = Math.max(dbg.maxGap, ts - dbg.lastFrame);
+        dbg.lastFrame = ts;
+      }
+    });
+  }
 
   function resizeInk() {
     rect = els.board.getBoundingClientRect();
@@ -365,42 +398,44 @@
     }
     try { els.ink.setPointerCapture(e.pointerId); } catch (err) { /* z. B. synthetische Events */ }
     const erasing = isEraser(e);
-    active = { id: e.pointerId, pts: [], erasing, lastTs: e.timeStamp };
+    active = { id: e.pointerId, pts: [], erasing, drawn: 0 };
     const p = samplePoint(e);
     active.pts.push(p);
     if (erasing) erase(p);
-    else Ink.drawTail(ctx, active.pts, 0, rect.width, ox, oy);
+    else scheduleDraw();
   }
 
   function onMove(e) {
     if (!active || e.pointerId !== active.id) return;
-    if (e.type === 'pointermove') e.preventDefault();
+    e.preventDefault();
     const evs = (e.getCoalescedEvents && e.getCoalescedEvents()) || [];
-    // pointerrawupdate und pointermove liefern dieselben Punkte: ältere verwerfen,
-    // gleich alte fallen beim Zeichnen über den Mindestabstand weg
-    const list = (evs.length ? evs : [e]).filter((ev) => ev.timeStamp >= active.lastTs);
-    if (!list.length) return;
-    active.lastTs = list[list.length - 1].timeStamp;
+    const list = evs.length ? evs : [e]; // alle Zwischenpunkte seit dem letzten Ereignis
+    const h0 = DEBUG ? performance.now() : 0;
+    if (DEBUG) { dbg.events++; dbg.points += list.length; }
     if (active.erasing) { for (const ev of list) erase(toBoard(ev)); return; }
     const pts = active.pts;
-    const from = pts.length;
     for (const ev of list) {
       const p = samplePoint(ev);
       const last = pts[pts.length - 1];
       if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 0.0004) { last[2] = p[2]; continue; }
       pts.push(p);
     }
-    Ink.drawTail(ctx, pts, from, rect.width, ox, oy); // nur das neue Stück zeichnen
+    scheduleDraw();
+    if (DEBUG) dbg.handlerMs += performance.now() - h0;
   }
 
   function finishStroke() {
     if (!active) return;
-    if (!active.erasing) strokes.push(active.pts);
+    if (!active.erasing) {
+      Ink.drawTail(ctx, active.pts, active.drawn, rect.width, ox, oy); // Rest sofort zeichnen
+      strokes.push(active.pts);
+    }
     active = null;
   }
 
   function onUp(e) {
     if (!active || e.pointerId !== active.id) return;
+    if (DEBUG) dbg.lastFrame = 0;
     finishStroke();
   }
 
@@ -431,7 +466,6 @@
   // ---------- Events ----------
   els.ink.addEventListener('pointerdown', onDown);
   els.ink.addEventListener('pointermove', onMove);
-  if (useRaw) els.ink.addEventListener('pointerrawupdate', onMove);
   els.ink.addEventListener('pointerup', onUp);
   els.ink.addEventListener('pointercancel', onUp);
   els.ink.addEventListener('contextmenu', (e) => e.preventDefault()); // Seitentaste

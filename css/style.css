@@ -174,3 +174,10 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   .toolbar .group { justify-content: flex-start; }
   .sheet { width: min(100dvh, 100vw - 260px); }
 }
+
+/* Diagnose-Anzeige (?debug) */
+.debug-box {
+  position: fixed; left: 8px; bottom: 8px; z-index: 10;
+  background: rgba(0, 0, 0, .78); color: #fff; font: 12px/1.4 ui-monospace, Consolas, monospace;
+  padding: 6px 10px; border-radius: 6px; pointer-events: none; max-width: calc(100vw - 16px);
+}
