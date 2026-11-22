@@ -11,7 +11,7 @@
   const $ = (id) => document.getElementById(id);
   const els = {
     sheet: $('sheet'), board: $('board'), overlay: $('overlay'), ink: $('ink'), msg: $('board-msg'),
-    timer: $('timer'), start: $('btn-start'), pause: $('btn-pause'), stop: $('btn-stop'), newBtn: $('btn-new'), save: $('btn-save'),
+    timer: $('timer'), start: $('btn-start'), pause: $('btn-pause'), stop: $('btn-stop'), abort: $('btn-abort'), newBtn: $('btn-new'), save: $('btn-save'),
     bestCharts: $('best-charts'), bestTitle: $('best-title'), clearLog: $('btn-clear-log'), sessionTitle: $('session-title'), sessionRows: $('session-rows'), sessionSummary: $('session-summary'),
   };
 
@@ -23,6 +23,7 @@
   let running = false;
   let paused = false;     // Pause gedrückt (Spiel läuft weiter, Uhr steht)
   let stopped = false;    // Stop gedrückt = Spiel als fertig markiert
+  let aborted = false;    // Abbrechen gedrückt = Rätsel aufgegeben
   let runStart = 0;
   let generating = false;
   let generationId = 0;
@@ -129,8 +130,9 @@
     els.sessionRows.innerHTML = rows.join('');
     const done = session.games.filter((g) => g.status === 'beendet');
     const dropped = session.games.filter((g) => g.status === 'verworfen').length;
+    const gaveUp = session.games.filter((g) => g.status === 'abgebrochen').length;
     const avg = done.length ? fmt(done.reduce((t, g) => t + g.ms, 0) / done.length) : '–';
-    els.sessionSummary.textContent = `${done.length} beendet · ${dropped} verworfen · Ø ${avg}`;
+    els.sessionSummary.textContent = `${done.length} beendet · ${gaveUp} abgebrochen · ${dropped} verworfen · Ø ${avg}`;
   }
 
   // ---------- Level per Cookie ----------
@@ -190,6 +192,21 @@
     showMsg('Pause – mit <b>Weiter</b> geht es weiter');
   }
 
+  /** Abbrechen: Rätsel aufgeben – landet als "abgebrochen" im Log, nie in den Bestzeiten. */
+  function abort() {
+    if (!current || aborted) return;
+    halt();
+    paused = false;
+    stopped = false;
+    aborted = true;
+    current.ms = elapsed;
+    current.status = 'abgebrochen';
+    current = null;
+    renderSession();
+    updateUI();
+    showMsg('Abgebrochen – mit <b>Neu generieren</b> geht es weiter', 3000);
+  }
+
   function togglePause() { if (paused) start(); else pause(); }
 
   /** Stop: Spiel als fertig markieren (zählt beim Verlassen als beendet). */
@@ -203,7 +220,7 @@
     renderSession();
   }
 
-  const canWrite = () => !!game && running && !generating;
+  const canWrite = () => !!game && running && !generating && !aborted;
 
   // ---------- Neues Rätsel ----------
   async function newPuzzle() {
@@ -212,6 +229,7 @@
     else closeEntry();
     paused = false;
     stopped = false;
+    aborted = false;
     elapsed = 0;
     active = null;
     strokes = [];
@@ -251,7 +269,8 @@
   }
 
   function updateUI() {
-    els.start.disabled = !game || running || paused || generating;
+    els.start.disabled = !game || running || paused || generating || aborted;
+    els.abort.disabled = !game || generating || aborted || (!running && !paused && !stopped);
     els.pause.disabled = !running && !paused;
     els.pause.textContent = paused ? 'Weiter' : 'Pause';
     els.pause.classList.toggle('btn-primary', paused);
@@ -396,6 +415,7 @@
   els.start.addEventListener('click', start);
   els.pause.addEventListener('click', togglePause);
   els.stop.addEventListener('click', stop);
+  els.abort.addEventListener('click', abort);
   els.newBtn.addEventListener('click', newPuzzle);
   els.save.addEventListener('click', saveImage);
   els.clearLog.addEventListener('click', clearSession);

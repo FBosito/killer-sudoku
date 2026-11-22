@@ -22,6 +22,7 @@ im Querformat über die ganze Höhe (Buttons und Session-Log links daneben).
 - **Start** gibt das Brett zum Schreiben frei und startet die Uhr.
 - **Pause/Weiter** unterbricht kurz (Uhr steht, Brett gesperrt); beim Wechsel in einen anderen Tab pausiert die App automatisch.
 - **Stop** markiert das Spiel als fertig.
+- **Abbrechen** gibt das Rätsel auf: Es landet als *abgebrochen* im Log und nie in den Bestzeiten.
 - **Stift** schreibt mit schwarzer Tinte und fester Strichstärke (Scratchpad-Prinzip, keine Erkennung).
   Radiergummi-Ende oder gedrückte Seitentaste löscht überstrichene Striche. Finger/Handballen werden ignoriert.
 - **Speichern** legt das Rätsel mit der eigenen Lösung, Level und Zeit als PNG-Bild ab.

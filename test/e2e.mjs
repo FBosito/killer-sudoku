@@ -193,13 +193,22 @@ try {
   await evaluate("document.getElementById('btn-new').click()");    // laufend verlassen → verworfen
   await waitForPuzzle();
   await sleep(300);
+  await evaluate("document.getElementById('btn-start').click()");
+  await sleep(1100);
+  await evaluate("document.getElementById('btn-abort').click()");  // aufgegeben → abgebrochen
+  await pen(inCell(0, [[0.5, 0.2], [0.5, 0.8]]));
+  check('Abbrechen sperrt Brett und Start', (await strokeCount()) === 0
+    && (await evaluate("document.getElementById('btn-start').disabled && document.getElementById('btn-abort').disabled")));
+  await evaluate("document.getElementById('btn-new').click()");
+  await waitForPuzzle();
+  await sleep(300);
   check('Neu generieren: Tinte weg, Uhr 00:00, gesperrt',
     (await strokeCount()) === 0 && (await evaluate("document.getElementById('timer').textContent")) === '00:00'
     && (await evaluate("document.getElementById('sheet').classList.contains('locked')")));
 
   // Session-Protokoll: Spiel 1 (gestoppt) beendet, Spiel 2 (nie gestartet) verworfen... siehe unten
   const log = await evaluate('KS.App.session.games.map((g) => g.status + ":" + g.level)');
-  check('Session-Log', JSON.stringify(log) === JSON.stringify(['beendet:3', 'verworfen:3', 'verworfen:3', 'offen:3']), JSON.stringify(log));
+  check('Session-Log', JSON.stringify(log) === JSON.stringify(['beendet:3', 'verworfen:3', 'verworfen:3', 'abgebrochen:3', 'offen:3']), JSON.stringify(log));
   const best = await evaluate("JSON.parse(localStorage.getItem('ks.best.v1') || '{}')");
   check('Bestzeit gespeichert (Level 3)', Array.isArray(best[3]) && best[3].length === 1,
     JSON.stringify(best));
