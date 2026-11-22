@@ -5,12 +5,14 @@
   const G = KS.Generator;
   const Ink = KS.Ink;
   const PREF_KEY = 'ks.prefs.v1';
+  const BEST_KEY = 'ks.best.v1';
+  const BEST_COUNT = 5;
 
   const $ = (id) => document.getElementById(id);
   const els = {
     sheet: $('sheet'), board: $('board'), overlay: $('overlay'), ink: $('ink'), msg: $('board-msg'),
-    timer: $('timer'), start: $('btn-start'), stop: $('btn-stop'), newBtn: $('btn-new'), save: $('btn-save'),
-    clearLog: $('btn-clear-log'), sessionTitle: $('session-title'), sessionRows: $('session-rows'), sessionSummary: $('session-summary'),
+    timer: $('timer'), start: $('btn-start'), pause: $('btn-pause'), stop: $('btn-stop'), newBtn: $('btn-new'), save: $('btn-save'),
+    bestCharts: $('best-charts'), bestTitle: $('best-title'), clearLog: $('btn-clear-log'), sessionTitle: $('session-title'), sessionRows: $('session-rows'), sessionSummary: $('session-summary'),
   };
 
   // ---------- Zustand ----------
@@ -19,13 +21,15 @@
   let strokes = [];       // Striche in Brett-Koordinaten 0..1
   let elapsed = 0;        // ms bis zum letzten Stop
   let running = false;
+  let paused = false;     // Pause gedrückt (Spiel läuft weiter, Uhr steht)
+  let stopped = false;    // Stop gedrückt = Spiel als fertig markiert
   let runStart = 0;
   let generating = false;
   let generationId = 0;
 
   // ---------- Session-Protokoll ----------
   // Jeder Seitenaufruf startet eine neue Session. Ein Spiel gilt als "beendet", wenn es
-  // bei angehaltener Uhr (Stop) verlassen wird, sonst als "verworfen".
+  // nach Stop verlassen wird, sonst (laufend, pausiert, nie gestartet) als "verworfen".
   const session = { start: new Date(), games: [] };
   let current = null; // aktueller Protokolleintrag
 
@@ -38,9 +42,62 @@
   function closeEntry() {
     if (!current) return;
     current.ms = elapsedMs();
-    current.status = !running && current.ms >= 1000 ? 'beendet' : 'verworfen';
+    current.status = stopped && !running && current.ms >= 1000 ? 'beendet' : 'verworfen';
+    if (current.status === 'beendet') recordBest(current.level, current.ms);
     current = null;
     renderSession();
+  }
+
+  // ---------- Bestzeiten (dauerhaft, je Level Top 5) ----------
+  let freshBest = null; // { level, at } des zuletzt eingetragenen Rekords
+  let pendingMsg = null; // Rekord-Meldung, wird nach dem Erzeugen des neuen Rätsels gezeigt
+
+  function readBest() {
+    try {
+      const o = JSON.parse(localStorage.getItem(BEST_KEY) || '{}');
+      return o && typeof o === 'object' ? o : {};
+    } catch (e) { return {}; }
+  }
+
+  function recordBest(lvl, ms) {
+    const best = readBest();
+    const list = (best[lvl] = Array.isArray(best[lvl]) ? best[lvl] : []);
+    const entry = { ms: Math.round(ms), at: new Date().toISOString() };
+    list.push(entry);
+    list.sort((a, b) => a.ms - b.ms);
+    list.length = Math.min(list.length, BEST_COUNT);
+    try { localStorage.setItem(BEST_KEY, JSON.stringify(best)); } catch (e) { /* voll */ }
+    const place = list.indexOf(entry) + 1;
+    if (place > 0) {
+      freshBest = { level: lvl, at: entry.at };
+      pendingMsg = (place === 1 ? `Neue Bestzeit für Level ${lvl}!<br><b>${fmt(ms)}</b>` : `Platz ${place} der Bestenliste (Level ${lvl})<br><b>${fmt(ms)}</b>`);
+    }
+    renderBest();
+  }
+
+  function renderBest() {
+    const best = readBest();
+    const day = (iso) => new Date(iso).toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    // nur das aktuell gewählte Level
+    els.bestTitle.textContent = `Bestzeiten Level ${level} · ${G.LEVELS[level].name}`;
+    const panels = [level].map((lvl) => {
+      const list = (best[lvl] || []).slice(0, BEST_COUNT);
+      const head = '';
+      if (!list.length) return `<div class="best-panel">${head}<div class="best-empty">noch keine beendeten Spiele</div></div>`;
+      // Skala je Level: längste Zeit der Top 5 = volle Breite
+      const max = Math.max(...list.map((e) => e.ms));
+      const rows = list.map((e, i) => {
+        const fresh = freshBest && freshBest.level === lvl && freshBest.at === e.at;
+        const pct = Math.max(2, (e.ms / max) * 100);
+        const when = new Date(e.at).toLocaleString('de-DE', { dateStyle: 'medium', timeStyle: 'short' });
+        return `<div class="best-row${fresh ? ' fresh' : ''}" title="Platz ${i + 1}: ${fmt(e.ms)} am ${when}">` +
+          `<span class="best-rank">${i + 1}.</span>` +
+          `<span class="best-track"><span class="best-bar" style="width:${pct.toFixed(1)}%"></span></span>` +
+          `<span class="best-val">${fmt(e.ms)}<small>${day(e.at)}</small></span></div>`;
+      });
+      return `<div class="best-panel" role="list" aria-label="Bestzeiten Level ${lvl}">${head}${rows.join('')}</div>`;
+    });
+    els.bestCharts.innerHTML = panels.join('');
   }
 
   function closeEntryAs(status) {
@@ -64,7 +121,7 @@
   function renderSession() {
     els.sessionTitle.textContent = `Session seit ${clock(session.start)} Uhr`;
     const rows = session.games.slice().reverse().map((g) => {
-      const status = g === current ? (running ? 'läuft' : g.ms || elapsed ? 'pausiert' : 'bereit') : g.status;
+      const status = g === current ? (running ? 'läuft' : paused ? 'pausiert' : stopped ? 'gestoppt' : 'bereit') : g.status;
       const ms = g === current ? elapsedMs() : g.ms;
       return `<tr class="st-${status}"><td>${g.nr}</td><td>${clock(g.startedAt)}</td><td>${g.level}</td>` +
         `<td class="t"${g === current ? ' id="session-live"' : ''}>${fmt(ms)}</td><td>${status}</td></tr>`;
@@ -107,6 +164,8 @@
   function start() {
     if (!game || generating || running) return;
     running = true;
+    paused = false;
+    stopped = false;
     runStart = performance.now();
     hideMsg();
     tick();
@@ -114,12 +173,32 @@
     renderSession();
   }
 
-  function stop() {
-    if (!running) return;
-    elapsed += performance.now() - runStart;
+  function halt() {
+    if (running) elapsed += performance.now() - runStart;
     running = false;
     finishStroke();
     tick();
+  }
+
+  /** Pause: Uhr anhalten, Brett sperren – das Spiel bleibt offen. */
+  function pause() {
+    if (!running) return;
+    halt();
+    paused = true;
+    updateUI();
+    renderSession();
+    showMsg('Pause – mit <b>Weiter</b> geht es weiter');
+  }
+
+  function togglePause() { if (paused) start(); else pause(); }
+
+  /** Stop: Spiel als fertig markieren (zählt beim Verlassen als beendet). */
+  function stop() {
+    if (!running && !paused) return;
+    halt();
+    paused = false;
+    stopped = true;
+    hideMsg();
     updateUI();
     renderSession();
   }
@@ -131,6 +210,8 @@
     const myId = ++generationId;
     if (running) { elapsed += performance.now() - runStart; running = false; closeEntryAs('verworfen'); }
     else closeEntry();
+    paused = false;
+    stopped = false;
     elapsed = 0;
     active = null;
     strokes = [];
@@ -146,7 +227,7 @@
     if (myId !== generationId) return; // inzwischen erneut geklickt
     generating = false;
     game = { level: lvl, cages: p.cages, solution: p.solution };
-    hideMsg();
+    if (pendingMsg) { showMsg(pendingMsg, 3000); pendingMsg = null; } else hideMsg();
     renderOverlay();
     updateUI();
     beginEntry();
@@ -170,8 +251,11 @@
   }
 
   function updateUI() {
-    els.start.disabled = !game || running || generating;
-    els.stop.disabled = !running;
+    els.start.disabled = !game || running || paused || generating;
+    els.pause.disabled = !running && !paused;
+    els.pause.textContent = paused ? 'Weiter' : 'Pause';
+    els.pause.classList.toggle('btn-primary', paused);
+    els.stop.disabled = !running && !paused;
     els.save.disabled = !game || generating;
     els.timer.classList.toggle('running', running);
     els.sheet.classList.toggle('locked', !canWrite());
@@ -226,7 +310,8 @@
     if (!rect) resizeInk();
     if (active) return;
     if (!canWrite()) {
-      if (game && !generating) showMsg('Zum Schreiben auf <b>Start</b> drücken', 1500);
+      if (paused) showMsg('Pause – mit <b>Weiter</b> geht es weiter');
+      else if (game && !generating) showMsg('Zum Schreiben auf <b>Start</b> drücken', 1500);
       return;
     }
     try { els.ink.setPointerCapture(e.pointerId); } catch (err) { /* z. B. synthetische Events */ }
@@ -309,16 +394,17 @@
   els.ink.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
 
   els.start.addEventListener('click', start);
+  els.pause.addEventListener('click', togglePause);
   els.stop.addEventListener('click', stop);
   els.newBtn.addEventListener('click', newPuzzle);
   els.save.addEventListener('click', saveImage);
   els.clearLog.addEventListener('click', clearSession);
   for (const b of document.querySelectorAll('.level')) {
-    b.addEventListener('click', () => { level = +b.dataset.level; writeLevel(level); updateUI(); });
+    b.addEventListener('click', () => { level = +b.dataset.level; writeLevel(level); updateUI(); renderBest(); });
   }
   window.addEventListener('resize', resizeInk);
   if (window.ResizeObserver) new ResizeObserver(resizeInk).observe(els.sheet);
-  document.addEventListener('visibilitychange', () => { if (document.hidden) stop(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) pause(); });
 
   // Für Tests
   window.KS.App = { session, get strokes() { return strokes; }, get game() { return game; }, get level() { return level; } };
@@ -326,5 +412,6 @@
   resizeInk();
   renderOverlay();
   renderSession();
+  renderBest();
   newPuzzle();
 })();

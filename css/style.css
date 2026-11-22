@@ -6,6 +6,11 @@
   --bg: #fff;
   --accent: #1f5fbf;
   --note-bg: #f4f5f7;
+  --series-1: #2a78d6;
+  --series-1-strong: #184f95;
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --grid: #d9d9d6;
   --radius: 8px;
   font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
   color: var(--ink);
@@ -130,6 +135,29 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 .session tr.st-beendet td:last-child { color: #2e7d32; font-weight: 600; }
 .session tr.st-verworfen td { color: #999; }
 .session tr.st-läuft td:last-child { color: var(--accent); font-weight: 600; }
+
+/* ---------- Bestzeiten (je Level Top 5, waagerechte Balken) ---------- */
+.best { margin-top: 18px; }
+.best h2 { font-size: 1.05rem; margin: 0 0 8px; }
+.best-charts { max-width: 480px; }
+.best-panel h3 { font-size: .9rem; font-weight: 600; margin: 0 0 4px; color: var(--text-secondary); }
+.best-row {
+  display: grid;
+  grid-template-columns: 1.6em 1fr auto;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  font-variant-numeric: tabular-nums;
+  font-size: .9rem;
+}
+.best-rank { color: var(--text-secondary); text-align: right; }
+.best-track { position: relative; height: 100%; display: flex; align-items: center; border-left: 1px solid var(--grid); }
+.best-bar { height: 14px; background: var(--series-1); border-radius: 0 4px 4px 0; min-width: 4px; }
+.best-row:hover .best-bar { filter: brightness(1.12); }
+.best-row.fresh .best-bar { background: var(--series-1-strong); }
+.best-val { color: var(--text-primary); min-width: 8.5em; white-space: nowrap; }
+.best-val small { color: var(--text-secondary); margin-left: 6px; }
+.best-empty { color: var(--text-secondary); font-size: .9rem; padding: 4px 0; }
 
 /* Querformat: Blatt über die ganze Höhe, Buttons und Session-Log links daneben
    (links, damit der Handballen beim Schreiben keine Buttons trifft) */

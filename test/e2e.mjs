@@ -143,6 +143,19 @@ try {
   await synthPen(10, [[0.2, 0.5], [0.8, 0.5]], 3);
   check('Seitentaste löscht Strich', (await strokeCount()) === 3);
 
+  // Pause / Weiter
+  await evaluate("document.getElementById('btn-pause').click()");
+  const tP = await evaluate("document.getElementById('timer').textContent");
+  await pen(inCell(40, [[0.5, 0.2], [0.5, 0.8]]));
+  await sleep(1200);
+  check('Pause: Uhr steht, Brett gesperrt, Knopf heißt Weiter',
+    (await strokeCount()) === 3 && tP === (await evaluate("document.getElementById('timer').textContent"))
+    && (await evaluate("document.getElementById('btn-pause').textContent")) === 'Weiter');
+  await evaluate("document.getElementById('btn-pause').click()");
+  await pen(inCell(40, [[0.5, 0.2], [0.5, 0.8]]));
+  check('Weiter: Schreiben wieder möglich', (await strokeCount()) === 4);
+  await evaluate('KS.App.strokes.pop(); 1');
+
   // Stop sperrt
   await evaluate("document.getElementById('btn-stop').click()");
   await pen(inCell(40, [[0.5, 0.2], [0.5, 0.8]]));
@@ -187,10 +200,26 @@ try {
   // Session-Protokoll: Spiel 1 (gestoppt) beendet, Spiel 2 (nie gestartet) verworfen... siehe unten
   const log = await evaluate('KS.App.session.games.map((g) => g.status + ":" + g.level)');
   check('Session-Log', JSON.stringify(log) === JSON.stringify(['beendet:3', 'verworfen:3', 'verworfen:3', 'offen:3']), JSON.stringify(log));
+  const best = await evaluate("JSON.parse(localStorage.getItem('ks.best.v1') || '{}')");
+  check('Bestzeit gespeichert (Level 3)', Array.isArray(best[3]) && best[3].length === 1,
+    JSON.stringify(best));
+  check('Bestzeiten-Chart zeigt Eintrag', (await evaluate("document.querySelectorAll('.best-row').length")) === 1);
   await screenshot('5-session.png');
   await evaluate("document.getElementById('btn-clear-log').click()");
   const log2 = await evaluate('KS.App.session.games.map((g) => g.nr + ":" + g.status)');
   check('Log löschen behält nur aktuelles Spiel', JSON.stringify(log2) === JSON.stringify(['1:offen']), JSON.stringify(log2));
+  // Bestzeiten-Chart mit Beispieldaten (nur für den Screenshot)
+  await evaluate(`localStorage.setItem('ks.best.v1', JSON.stringify({
+    1: [{ ms: 312000, at: '2026-11-20T09:00:00Z' }, { ms: 355000, at: '2026-11-18T09:00:00Z' }, { ms: 401000, at: '2026-11-15T09:00:00Z' }],
+    2: [{ ms: 598000, at: '2026-11-21T09:00:00Z' }, { ms: 640000, at: '2026-11-19T09:00:00Z' }, { ms: 702000, at: '2026-11-17T09:00:00Z' }, { ms: 811000, at: '2026-11-12T09:00:00Z' }, { ms: 905000, at: '2026-11-10T09:00:00Z' }],
+    3: [{ ms: 1340000, at: '2026-11-22T09:00:00Z' }] })); location.reload(); 1`);
+  await waitForPuzzle();
+  await evaluate("document.querySelector('.session').scrollTop = 9999; 1");
+  check('Bestzeiten nur für gewähltes Level (3: 1 Eintrag)', (await evaluate("document.querySelectorAll('.best-row').length")) === 1
+    && (await evaluate("document.getElementById('best-title').textContent")).includes('Level 3'));
+  await evaluate("document.querySelector('.level[data-level=\"2\"]').click(); document.querySelector('.session').scrollTop = 9999; 1");
+  check('Levelwechsel zeigt dessen Bestzeiten (2: 5 Einträge)', (await evaluate("document.querySelectorAll('.best-row').length")) === 5);
+  await screenshot('6-bestzeiten.png');
   await send('Emulation.setDeviceMetricsOverride', { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
   await sleep(300);
   await screenshot('4-quer.png');

@@ -5,7 +5,7 @@
 
   const INK = {
     color: '#000',
-    width: 0.0034,       // Strichstärke relativ zur Brettbreite (≈ 2,7 px bei 800 px)
+    width: 0.0022,       // Strichstärke relativ zur Brettbreite (≈ 1,8 px bei 800 px)
     eraserRadius: 0.014, // Radiergummi-Radius relativ zur Brettbreite
   };
 

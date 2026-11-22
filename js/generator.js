@@ -223,9 +223,11 @@
     return true;
   }
 
+  /** Logikstufen: basic = Singles + Käfig-Kombinationen; medium = zusätzlich Käfig-in-Einheit-
+   *  Elimination; advanced = zusätzlich 45er-Regel (Innies/Outies als virtuelle Käfige). */
   function prepare(cages, mode) {
     const real = cages.map((k) => makeConstraint(k.cells, k.sum));
-    const cons = mode === 'basic' ? real : real.concat(virtualConstraints(cages));
+    const cons = mode === 'advanced' ? real.concat(virtualConstraints(cages)) : real;
     return { peers: buildPeers(cages), cons, advanced: mode !== 'basic' };
   }
 
@@ -290,10 +292,12 @@
   }
 
   const LEVELS = {
-    1: { name: 'Leicht', sizes: { 2: 45, 3: 40, 4: 15 }, max: 4, minSingles: 6, maxSingles: 10, rate: 'basic' },
-    2: { name: 'Mittel', sizes: { 2: 35, 3: 40, 4: 25 }, max: 4, minSingles: 0, maxSingles: 3, rate: 'advanced' },
-    3: { name: 'Schwer', sizes: { 2: 30, 3: 40, 4: 20, 5: 10 }, max: 5, minSingles: 0, maxSingles: 0, rate: 'advanced' },
-    4: { name: 'Experte', sizes: { 2: 12, 3: 28, 4: 30, 5: 18, 6: 12 }, max: 6, minSingles: 0, maxSingles: 0, rate: 'hard' },
+    // Einzelzellen-Käfige gibt es in keinem Level (maxSingles 0 ist eine harte Bedingung).
+    // accept: zulässige Logikstufen (siehe prepare/rateCages)
+    1: { name: 'Leicht', sizes: { 2: 60, 3: 35, 4: 5 }, max: 4, minSingles: 0, maxSingles: 0, accept: ['basic', 'medium'] },
+    2: { name: 'Mittel', sizes: { 2: 35, 3: 40, 4: 25 }, max: 4, minSingles: 0, maxSingles: 0, accept: ['advanced'] },
+    3: { name: 'Schwer', sizes: { 2: 30, 3: 40, 4: 20, 5: 10 }, max: 5, minSingles: 0, maxSingles: 0, accept: ['advanced'] },
+    4: { name: 'Experte', sizes: { 2: 12, 3: 28, 4: 30, 5: 18, 6: 12 }, max: 6, minSingles: 0, maxSingles: 0, accept: ['hard', 'advanced'] },
   };
 
   function pickSize(cfg, rnd) {
@@ -385,6 +389,31 @@
     return normalizeCages(groups, sol);
   }
 
+  /** Hängt Einzelzellen-Käfige an passende Nachbarkäfige (keine doppelte Ziffer, Größe <= limit). */
+  function absorbSingles(cages, sol, limit, rnd) {
+    const groups = cages.map((k) => k.cells.slice());
+    const idxOf = new Int16Array(81);
+    groups.forEach((g, i) => g.forEach((c) => { idxOf[c] = i; }));
+    for (let gi = 0; gi < groups.length; gi++) {
+      if (groups[gi].length !== 1) continue;
+      const c = groups[gi][0];
+      const options = [];
+      for (const n of NEIGH[c]) {
+        const oi = idxOf[n];
+        if (oi === gi || groups[oi].length === 0 || groups[oi].length >= limit) continue;
+        if (groups[oi].some((x) => sol[x] === sol[c])) continue;
+        if (!options.includes(oi)) options.push(oi);
+      }
+      if (!options.length) continue;
+      shuffle(options, rnd).sort((a, b) => groups[a].length - groups[b].length);
+      const target = options[0];
+      groups[target].push(c);
+      idxOf[c] = target;
+      groups[gi] = [];
+    }
+    return normalizeCages(groups, sol);
+  }
+
   /** Macht ein mehrdeutiges Rätsel eindeutig, indem Käfige an Unterscheidungszellen geteilt werden. */
   function makeUnique(cages, sol, cfg, rnd, deadline) {
     for (let iter = 0; iter < 60; iter++) {
@@ -420,30 +449,33 @@
           const oi = groups.findIndex((g) => g.includes(n));
           if (oi < 0 || oi === gi) continue;
           const g = groups[oi];
-          if (g.length >= cfg.max) continue;
+          if (g.length >= cfg.max + 1) continue;
           if (g.some((x) => sol[x] === sol[c])) continue;
           options.push(oi);
         }
-        if (options.length) groups[options[(rnd() * options.length) | 0]].push(c);
-        else groups.push([c]);
+        if (options.length) {
+          // kleinere Käfige bevorzugen
+          options.sort((a, b) => groups[a].length - groups[b].length);
+          groups[options[0]].push(c);
+        } else groups.push([c]);
       }
       cages = normalizeCages(groups, sol);
+      if (cfg.maxSingles === 0) cages = absorbSingles(absorbSingles(cages, sol, cfg.max + 1, rnd), sol, cfg.max + 3, rnd);
     }
     return null;
   }
 
   function rateCages(cages) {
     if (logicalSolve(cages, 'basic')) return 'basic';
+    if (logicalSolve(cages, 'medium')) return 'medium';
     if (logicalSolve(cages, 'advanced')) return 'advanced';
     return 'hard';
   }
 
   function levelMatches(cfg, rating, cages) {
     const singles = cages.filter((k) => k.cells.length === 1).length;
-    if (singles > cfg.maxSingles + 1) return false;
-    if (cfg.rate === 'basic') return rating === 'basic';
-    if (cfg.rate === 'advanced') return rating === 'advanced';
-    return rating !== 'basic'; // Experte: mindestens fortgeschrittene Logik, gern mehr
+    if (singles > cfg.maxSingles) return false;
+    return cfg.accept.includes(rating);
   }
 
   /** Zustandsbehafteter Generator: step() macht einen Versuch und liefert ggf. das Ergebnis. */
@@ -459,16 +491,18 @@
         if (attempts % 4 === 0) sol = randomSolution(rnd);
         attempts++;
         let cages = partition(sol, cfg, rnd);
+        if (cfg.maxSingles === 0) cages = absorbSingles(absorbSingles(cages, sol, cfg.max + 1, rnd), sol, cfg.max + 3, rnd);
         cages = makeUnique(cages, sol, cfg, rnd, Math.max(deadline, Date.now() + 2000));
         if (cages) {
           const rating = rateCages(cages);
           const result = { level, levelName: cfg.name, cages, solution: sol, rating, attempts };
           if (levelMatches(cfg, rating, cages)) return result;
           const singles = cages.filter((k) => k.cells.length === 1).length;
-          const score = (rating === cfg.rate ? 0 : 100) + singles;
+          const score = singles * 1000 + (cfg.accept.includes(rating) ? 0 : 100);
           if (!fallback || score < fallback.score) { fallback = result; fallback.score = score; }
         }
-        if (Date.now() > deadline && fallback) return fallback;
+        // Nach Ablauf des Budgets das beste Ergebnis nehmen – Einzelzellen aber nur im Notfall
+        if (fallback && Date.now() > deadline && (fallback.score < 1000 || Date.now() > deadline + 15000)) return fallback;
         return null;
       },
     };

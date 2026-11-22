@@ -22,7 +22,8 @@
       <div class="group">
         <output id="timer" class="timer" aria-live="off">00:00</output>
         <button type="button" id="btn-start" class="btn btn-primary">Start</button>
-        <button type="button" id="btn-stop" class="btn">Stop</button>
+        <button type="button" id="btn-pause" class="btn" title="Kurz unterbrechen">Pause</button>
+        <button type="button" id="btn-stop" class="btn" title="Spiel beenden">Stop</button>
         <button type="button" id="btn-save" class="btn" title="Rätsel mit Lösung als Bild speichern">Speichern</button>
       </div>
     </header>
@@ -47,6 +48,11 @@
         <thead><tr><th>#</th><th>Beginn</th><th>Level</th><th class="t">Zeit</th><th>Status</th></tr></thead>
         <tbody id="session-rows"></tbody>
       </table>
+
+      <div class="best">
+        <h2 id="best-title">Bestzeiten</h2>
+        <div id="best-charts" class="best-charts"></div>
+      </div>
     </section>
   </main>
 
