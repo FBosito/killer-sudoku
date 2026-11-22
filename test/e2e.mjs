@@ -103,6 +103,7 @@ try {
 
   await evaluate("document.getElementById('btn-start').click()");
   await sleep(1300);
+  check('Kein Mauszeiger über dem Blatt beim Schreiben', (await evaluate("getComputedStyle(document.getElementById('ink')).cursor + '/' + getComputedStyle(document.getElementById('sheet')).cursor")) === 'none/none');
   check('Uhr läuft nach Start', (await evaluate("document.getElementById('timer').textContent")) === '00:01');
 
   // Ziffern schreiben: 1, 7, 4 (zweistrichig) und eine kleine Notiz

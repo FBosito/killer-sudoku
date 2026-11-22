@@ -98,8 +98,10 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 
 .overlay, .ink { position: absolute; inset: 0; width: 100%; height: 100%; }
 .overlay { pointer-events: none; }
-.ink { touch-action: none; cursor: none; } /* kein Fadenkreuz beim Schreiben */
-.sheet.locked .ink { cursor: default; }
+.ink { touch-action: none; }
+/* kein Mauszeiger/Fadenkreuz über dem Blatt beim Schreiben */
+.sheet, .sheet * { cursor: none !important; }
+.sheet.locked, .sheet.locked * { cursor: default !important; }
 
 .overlay .thin { stroke: var(--grid-thin); stroke-width: 1.2; }
 .overlay .thick { stroke: var(--line); stroke-width: 3.5; }
