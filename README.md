@@ -2,6 +2,8 @@
 
 Browserbasiertes Killer Sudoku zum Lösen mit dem Stift – wie auf Papier, optimiert fürs Tablet im Hochformat.
 
+**Online spielen:** https://fbosito.github.io/killer-sudoku/
+
 ## Starten
 
 `index.html` im Browser öffnen (Doppelklick genügt). Kein Server, kein Build, keine Abhängigkeiten –
