@@ -98,7 +98,7 @@ body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
 
 .overlay, .ink { position: absolute; inset: 0; width: 100%; height: 100%; }
 .overlay { pointer-events: none; }
-.ink { touch-action: none; cursor: crosshair; }
+.ink { touch-action: none; cursor: none; } /* kein Fadenkreuz beim Schreiben */
 .sheet.locked .ink { cursor: default; }
 
 .overlay .thin { stroke: var(--grid-thin); stroke-width: 1.2; }
