@@ -1,0 +1,145 @@
+:root {
+  --ink: #111;
+  --line: #222;
+  --grid-thin: #555;
+  --cage: #333;
+  --bg: #fff;
+  --accent: #1f5fbf;
+  --note-bg: #f4f5f7;
+  --radius: 8px;
+  font-family: "Segoe UI", system-ui, -apple-system, Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+
+.app {
+  display: grid;
+  height: 100vh;
+  height: 100dvh;
+  /* Hochformat: Buttons oben, Blatt über die ganze Breite, Session-Log unten */
+  grid-template-columns: 100%;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas: "tool" "sheet" "log";
+}
+.toolbar { grid-area: tool; padding: 10px 12px; }
+.board-wrap { grid-area: sheet; }
+.session { grid-area: log; }
+
+/* ---------- Toolbar ---------- */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+.btn, .level {
+  font: inherit;
+  border: 1px solid #bbb;
+  background: #fff;
+  color: var(--ink);
+  border-radius: var(--radius);
+  padding: 10px 16px;
+  min-height: 44px;
+  cursor: pointer;
+  touch-action: manipulation;
+  user-select: none;
+}
+.btn:hover:not(:disabled), .level:hover { border-color: #777; }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.levels { display: inline-flex; }
+.level { border-radius: 0; min-width: 48px; font-weight: 600; margin-left: -1px; }
+.level:first-child { border-radius: var(--radius) 0 0 var(--radius); margin-left: 0; }
+.level:last-child { border-radius: 0 var(--radius) var(--radius) 0; }
+.level[aria-checked="true"] { background: var(--ink); color: #fff; border-color: var(--ink); position: relative; }
+
+.timer {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.6rem;
+  font-weight: 600;
+  min-width: 5ch;
+  text-align: right;
+  padding-right: 4px;
+}
+.timer.running { color: var(--accent); }
+
+/* ---------- Blatt: Brett mit 3 cm Schreibrand ringsum ---------- */
+.board-wrap { display: flex; justify-content: center; align-items: flex-start; }
+.sheet {
+  --margin: 3cm;
+  position: relative;
+  /* quadratisch: volle Breite, aber nie höher als der Platz unter den Buttons */
+  width: min(100vw, 100dvh - 70px);
+  flex: none;
+  padding: var(--margin);
+  background: var(--note-bg);
+  user-select: none;
+  -webkit-user-select: none;
+}
+.board {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: var(--bg);
+}
+
+.overlay, .ink { position: absolute; inset: 0; width: 100%; height: 100%; }
+.overlay { pointer-events: none; }
+.ink { touch-action: none; cursor: crosshair; }
+.sheet.locked .ink { cursor: default; }
+
+.overlay .thin { stroke: var(--grid-thin); stroke-width: 1.2; }
+.overlay .thick { stroke: var(--line); stroke-width: 3.5; }
+.overlay .frame { stroke: var(--line); stroke-width: 4; fill: none; }
+.overlay .cage { stroke: var(--cage); stroke-width: 1.6; stroke-dasharray: 2 4; fill: none; stroke-linecap: round; }
+.overlay .sum { font-size: 19px; fill: var(--ink); font-family: "Segoe UI", system-ui, sans-serif; }
+
+.board-msg {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(255, 255, 255, .94);
+  border: 1px solid #ccc;
+  border-radius: 12px;
+  padding: 16px 24px;
+  font-size: 1.15rem;
+  text-align: center;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, .12);
+  pointer-events: none;
+}
+
+/* ---------- Session-Protokoll ---------- */
+.session { overflow: auto; padding: 10px 12px; }
+.session-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.session h2 { font-size: 1.05rem; margin: 0 0 6px; }
+.session-summary { color: #666; font-size: .95rem; margin-left: auto; }
+.btn.small { padding: 6px 12px; min-height: 36px; font-size: .9rem; }
+.session table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.session th, .session td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #e5e5e5; }
+.session th { font-weight: 600; color: #666; font-size: .85rem; }
+.session .t { text-align: right; }
+.session tr.st-beendet td:last-child { color: #2e7d32; font-weight: 600; }
+.session tr.st-verworfen td { color: #999; }
+.session tr.st-läuft td:last-child { color: var(--accent); font-weight: 600; }
+
+/* Querformat: Blatt über die ganze Höhe, Buttons und Session-Log links daneben
+   (links, damit der Handballen beim Schreiben keine Buttons trifft) */
+@media (orientation: landscape) {
+  .app {
+    grid-template-columns: minmax(260px, 1fr) auto;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "tool sheet" "log sheet";
+  }
+  .toolbar { flex-direction: column; align-items: stretch; justify-content: flex-start; }
+  .toolbar .group { justify-content: flex-start; }
+  .sheet { width: min(100dvh, 100vw - 260px); }
+}

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#ffffff">
+  <title>Killer Sudoku</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="toolbar">
+      <div class="group">
+        <div class="levels" role="radiogroup" aria-label="Schwierigkeitsstufe">
+          <button type="button" class="level" data-level="1" role="radio" title="Leicht">1</button>
+          <button type="button" class="level" data-level="2" role="radio" title="Mittel">2</button>
+          <button type="button" class="level" data-level="3" role="radio" title="Schwer">3</button>
+          <button type="button" class="level" data-level="4" role="radio" title="Experte">4</button>
+        </div>
+        <button type="button" id="btn-new" class="btn">Neu generieren</button>
+      </div>
+      <div class="group">
+        <output id="timer" class="timer" aria-live="off">00:00</output>
+        <button type="button" id="btn-start" class="btn btn-primary">Start</button>
+        <button type="button" id="btn-stop" class="btn">Stop</button>
+        <button type="button" id="btn-save" class="btn" title="Rätsel mit Lösung als Bild speichern">Speichern</button>
+      </div>
+    </header>
+
+    <section class="board-wrap">
+      <div id="sheet" class="sheet">
+        <div id="board" class="board">
+          <svg id="overlay" class="overlay" viewBox="0 0 900 900" aria-hidden="true"></svg>
+          <div id="board-msg" class="board-msg" hidden></div>
+        </div>
+        <canvas id="ink" class="ink"></canvas>
+      </div>
+    </section>
+
+    <section class="session">
+      <div class="session-head">
+        <h2 id="session-title">Session</h2>
+        <span id="session-summary" class="session-summary"></span>
+        <button type="button" id="btn-clear-log" class="btn small">Log löschen</button>
+      </div>
+      <table>
+        <thead><tr><th>#</th><th>Beginn</th><th>Level</th><th class="t">Zeit</th><th>Status</th></tr></thead>
+        <tbody id="session-rows"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script src="js/generator.js"></script>
+  <script src="js/geometry.js"></script>
+  <script src="js/ink.js"></script>
+  <script src="js/snapshot.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
